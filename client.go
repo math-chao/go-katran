@@ -1,4 +1,4 @@
-package gokatran
+package go_katran
 
 import "log"
 
