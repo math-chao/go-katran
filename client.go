@@ -12,7 +12,6 @@ import (
 	"github.com/math-chao/go-katran/katran"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -46,71 +45,109 @@ var (
 	}
 )
 
-func checkError(err error) {
+// func checkError(err error) {
+// 	if err != nil {
+// 		log.Fatalf("Error: %v\n", err)
+// 	}
+// }
+
+func NewClient(serverAddr string, opts ...grpc.DialOption) (*Client, error) {
+	client := &Client{}
+	// opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(serverAddr, opts...)
+	// conn, err := grpc.Dial(serverAddr, opts...)
 	if err != nil {
-		log.Fatalf("Error: %v\n", err)
+		return nil, errors.WithMessage(err, "KatranClient Init failed")
 	}
+	client.client = katran.NewKatranServiceClient(conn)
+	return client, nil
 }
 
 type Client struct {
 	client katran.KatranServiceClient
 }
 
-func (kc *Client) Init(serverAddr string) error {
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	conn, err := grpc.NewClient(serverAddr, opts...)
-	// conn, err := grpc.Dial(serverAddr, opts...)
-	if err != nil {
-		return errors.WithMessage(err, "KatranClient Init failed")
-	}
-	kc.client = katran.NewKatranServiceClient(conn)
-	return nil
-}
+// func (kc *Client) Init(serverAddr string) error {
+// 	var opts []grpc.DialOption
+// 	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+// 	conn, err := grpc.NewClient(serverAddr, opts...)
+// 	// conn, err := grpc.Dial(serverAddr, opts...)
+// 	if err != nil {
+// 		return errors.WithMessage(err, "KatranClient Init failed")
+// 	}
+// 	kc.client = katran.NewKatranServiceClient(conn)
+// 	return nil
+// }
 
-func (kc *Client) ChangeMac(mac string) {
+func (kc *Client) ChangeMac(ctx context.Context, mac string) error {
 	newMac := katran.Mac{Mac: mac}
-	res, err := kc.client.ChangeMac(context.Background(), &newMac)
-	checkError(err)
-	if res.Success == true {
-		log.Print("Mac address changed!")
-	} else {
-		log.Print("Mac was not changed")
+	res, err := kc.client.ChangeMac(ctx, &newMac)
+	if err != nil {
+		return errors.WithMessage(err, "KatranClient ChangeMac failed")
 	}
+
+	if !res.Success {
+		log.Print("Mac was not changed")
+		return errors.Errorf("KatranClient ChangeMac not success")
+	}
+
+	return nil
+
+	// checkError(err)
+	// if res.Success {
+	// 	log.Print("Mac address changed!")
+	// } else {
+	// 	log.Print("Mac was not changed")
+	// }
 }
 
-func (kc *Client) GetMac() {
-	mac, err := kc.client.GetMac(context.Background(), &katran.Empty{})
-	checkError(err)
-	log.Printf("Mac address is %v\n", mac.GetMac())
+func (kc *Client) GetMac(ctx context.Context) (string, error) {
+	mac, err := kc.client.GetMac(ctx, &katran.Empty{})
+	if err != nil {
+		return "", errors.WithMessage(err, "KatranClient GetMac Failed")
+	}
+	return mac.GetMac(), nil
+	// checkError(err)
+	// log.Printf("Mac address is %v\n", mac.GetMac())
 }
 
-func parseToVip(addr string, proto int) *katran.Vip {
-	var vip katran.Vip
+func parseToVip(addr string, proto int) (*katran.Vip, error) {
+	vip := &katran.Vip{}
 	vip.Protocol = int32(proto)
 	if strings.Index(addr, "[") >= 0 {
 		// v6 address. format [<addr>]:<port>
 		v6re := regexp.MustCompile(`\[(.*?)\]:(.*)`)
 		addr_port := v6re.FindStringSubmatch(addr)
 		if addr_port == nil {
-			log.Fatalf("invalid v6 address %v\n", addr)
+			return nil, errors.Errorf("ParseToVip for addr %s failed, invalid v6 address", addr)
+			// log.Fatalf("invalid v6 address %v\n", addr)
 		}
+
 		vip.Address = addr_port[1]
 		port, err := strconv.ParseInt(addr_port[2], 10, 32)
-		vip.Port = int32(port)
-		checkError(err)
-	} else {
-		// v4 address. format <addr>:<port>
-		addr_port := strings.Split(addr, ":")
-		if len(addr_port) != 2 {
-			log.Fatalf("incorrect v4 address: %v\n", addr)
+		if err != nil {
+			return nil, errors.Wrapf(err, "ParseToVip for addr %s failed, port is invalid", addr)
 		}
-		vip.Address = addr_port[0]
-		port, err := strconv.ParseInt(addr_port[1], 10, 32)
+
 		vip.Port = int32(port)
-		checkError(err)
+		return vip, nil
 	}
-	return &vip
+	// checkError(err)
+	// v4 address. format <addr>:<port>
+	addr_port := strings.Split(addr, ":")
+	if len(addr_port) != 2 {
+		return nil, errors.Errorf("ParseToVip for addr %s failed, invalid v4 address", addr)
+		// log.Fatalf("incorrect v4 address: %v\n", addr)
+	}
+
+	vip.Address = addr_port[0]
+	port, err := strconv.ParseInt(addr_port[1], 10, 32)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ParseToVip for addr %s failed, port is invalid", addr)
+	}
+	vip.Port = int32(port)
+	// checkError(err)
+	return vip, nil
 }
 
 func parseToReal(addr string, weight int64, flags int32) *katran.Real {
@@ -124,55 +161,82 @@ func parseToReal(addr string, weight int64, flags int32) *katran.Real {
 func parseToQuicReal(mapping string) (*katran.QuicReal, error) {
 	addr_id := strings.Split(mapping, "=")
 	if len(addr_id) != 2 {
-		return nil, errors.Errorf("quic mapping must be in <addr>=<id> format")
+		return nil, errors.Errorf("ParseToQuicReal for %s failed, quic mapping must be in <addr>=<id> format", mapping)
 	}
+
 	id, err := strconv.ParseInt(addr_id[1], 10, 64)
-	checkError(err)
+	if err != nil {
+		return nil, errors.Wrapf(err, "ParseToQuicReal for %s failed", mapping)
+	}
+
+	// checkError(err)
 	var qr katran.QuicReal
 	qr.Address = addr_id[0]
 	qr.Id = int32(id)
 	return &qr, nil
 }
 
-func (kc *Client) AddOrModifyService(
-	addr string, flagsString string, proto int, modify bool, setFlags bool) {
+func (kc *Client) AddOrModifyService(ctx context.Context, addr string, flagsString string, proto int, modify bool, setFlags bool) error {
 	log.Printf("Adding service: %v %v\n", addr, proto)
-	vip := parseToVip(addr, proto)
+	vip, err := parseToVip(addr, proto)
+	if err != nil {
+		return errors.WithMessage(err, "AddOrModifyService failed")
+	}
+
 	var flags int64
 	var exists bool
 	if flagsString != "" {
 		if flags, exists = vipFlagTranslationTable[flagsString]; !exists {
-			log.Printf("unrecognized flag: %v\n", flagsString)
-			return
+			// log.Printf("unrecognized flag: %v\n", flagsString)
+			return errors.Errorf("AddOrModifyService failed, unrecognized flag:%v", flagsString)
+			// return
 		}
 	}
+	action := ADD_VIP
 	if modify {
-		kc.UpdateService(vip, flags, MODIFY_VIP, setFlags)
-	} else {
-		kc.UpdateService(vip, flags, ADD_VIP, setFlags)
+		action = MODIFY_VIP
 	}
+	return kc.UpdateService(ctx, vip, flags, action, setFlags)
+
+	// if modify {
+	// 	return kc.UpdateService(vip, flags, MODIFY_VIP, setFlags)
+	// } else {
+	// 	return kc.UpdateService(vip, flags, ADD_VIP, setFlags)
+	// }
 }
 
-func (kc *Client) DelService(addr string, proto int) {
+func (kc *Client) DelService(ctx context.Context, addr string, proto int) error {
 	log.Printf("Deleting service: %v %v\n", addr, proto)
-	vip := parseToVip(addr, proto)
-	kc.UpdateService(vip, 0, DEL_VIP, false)
+	vip, err := parseToVip(addr, proto)
+	if err != nil {
+		return errors.WithMessagef(err, "DelService %d:%s failed", proto, addr)
+	}
+	return kc.UpdateService(ctx, vip, 0, DEL_VIP, false)
 }
 
-func (kc *Client) UpdateReal(addr string, flags int32, setFlags bool) {
+func (kc *Client) UpdateReal(ctx context.Context, addr string, flags int32, setFlags bool) error {
 	var rMeta katran.RealMeta
 	rMeta.Address = addr
 	rMeta.Flags = flags
 	rMeta.SetFlag = setFlags
-	ok, err := kc.client.ModifyReal(context.Background(), &rMeta)
-	checkError(err)
-	if ok.Success {
-		log.Printf("Real modified\n")
+	ok, err := kc.client.ModifyReal(ctx, &rMeta)
+	if err != nil {
+		return errors.Wrapf(err, "UpdateReal for addr:%s flags:%d setFlags:%v failed", addr, flags, setFlags)
 	}
+
+	if !ok.Success {
+		return errors.Errorf("UpdateReal for addr:%s flags:%d setFlags:%v failed, modify not success", addr, flags, setFlags)
+	}
+
+	log.Printf("Real modified\n")
+	// checkError(err)
+	// if ok.Success {
+	// 	log.Printf("Real modified\n")
+	// }
+	return nil
 }
 
-func (kc *Client) UpdateService(
-	vip *katran.Vip, flags int64, action int, setFlags bool) {
+func (kc *Client) UpdateService(ctx context.Context, vip *katran.Vip, flags int64, action int, setFlags bool) error {
 	var vMeta katran.VipMeta
 	var ok *katran.Bool
 	var err error
@@ -181,32 +245,43 @@ func (kc *Client) UpdateService(
 	vMeta.SetFlag = setFlags
 	switch action {
 	case MODIFY_VIP:
-		ok, err = kc.client.ModifyVip(context.Background(), &vMeta)
+		ok, err = kc.client.ModifyVip(ctx, &vMeta)
 		break
 	case ADD_VIP:
-		ok, err = kc.client.AddVip(context.Background(), &vMeta)
+		ok, err = kc.client.AddVip(ctx, &vMeta)
 		break
 	case DEL_VIP:
-		ok, err = kc.client.DelVip(context.Background(), vip)
+		ok, err = kc.client.DelVip(ctx, vip)
 		break
 	default:
 		break
 	}
-	checkError(err)
-	if ok.Success {
-		log.Printf("Vip modified\n")
+
+	if err != nil {
+		return errors.WithMessagef(err, "UpdateService failed")
 	}
+	// checkError(err)
+	if !ok.Success {
+		return errors.Errorf("UpdateService failed, not success")
+	}
+
+	log.Printf("Vip modified\n")
+	return nil
 }
 
-func (kc *Client) UpdateServerForVip(
-	vipAddr string, proto int, realAddr string, weight int64, realFlags string, delete bool) {
-	vip := parseToVip(vipAddr, proto)
+func (kc *Client) UpdateServerForVip(ctx context.Context, vipAddr string, proto int, realAddr string, weight int64, realFlags string, delete bool) error {
+	vip, err := parseToVip(vipAddr, proto)
+	if err != nil {
+		return errors.WithMessage(err, "UpdateServerForVip failed")
+	}
+
 	var flags int32
 	var exists bool
 	if realFlags != "" {
 		if flags, exists = realFlagTranslationTable[realFlags]; !exists {
-			log.Printf("unrecognized flag: %v\n", realFlags)
-			return
+			return errors.Errorf("UpdateServerForVip failed, unrecognized flag:%v", realFlags)
+			// log.Printf("unrecognized flag: %v\n", realFlags)
+			// return
 		}
 	}
 	real := parseToReal(realAddr, weight, flags)
@@ -218,23 +293,28 @@ func (kc *Client) UpdateServerForVip(
 	}
 	var reals katran.Reals
 	reals.Reals = append(reals.Reals, real)
-	kc.ModifyRealsForVip(vip, &reals, action)
+	return kc.ModifyRealsForVip(ctx, vip, &reals, action)
 }
 
-func (kc *Client) ModifyRealsForVip(
-	vip *katran.Vip, reals *katran.Reals, action katran.Action) {
+func (kc *Client) ModifyRealsForVip(ctx context.Context, vip *katran.Vip, reals *katran.Reals, action katran.Action) error {
 	var mReals katran.ModifiedRealsForVip
 	mReals.Vip = vip
 	mReals.Real = reals
 	mReals.Action = action
-	ok, err := kc.client.ModifyRealsForVip(context.Background(), &mReals)
-	checkError(err)
-	if ok.Success {
-		log.Printf("Reals modified\n")
+	ok, err := kc.client.ModifyRealsForVip(ctx, &mReals)
+	if err != nil {
+		return errors.Wrapf(err, "ModifyRealsForVip failed")
 	}
+
+	// checkError(err)
+	if !ok.Success {
+		return errors.Errorf("ModifyRealsForVip failed, not success")
+	}
+	log.Printf("Reals modified\n")
+	return nil
 }
 
-func (kc *Client) ModifyQuicMappings(mapping string, delete bool) error {
+func (kc *Client) ModifyQuicMappings(ctx context.Context, mapping string, delete bool) error {
 	var action katran.Action
 	if delete {
 		action = katran.Action_DEL
@@ -251,38 +331,57 @@ func (kc *Client) ModifyQuicMappings(mapping string, delete bool) error {
 	var mqr katran.ModifiedQuicReals
 	mqr.Reals = &qrs
 	mqr.Action = action
-	ok, err := kc.client.ModifyQuicRealsMapping(
-		context.Background(), &mqr)
-	checkError(err)
-	if ok.Success {
-		log.Printf("Quic mapping modified\n")
+	ok, err := kc.client.ModifyQuicRealsMapping(ctx, &mqr)
+	// checkError(err)
+	// if ok.Success {
+	// 	log.Printf("Quic mapping modified\n")
+	// }
+	if err != nil {
+		return errors.Wrapf(err, "ModifyQuicRealsMapping failed")
 	}
+
+	// checkError(err)
+	if !ok.Success {
+		return errors.Errorf("ModifyQuicRealsMapping failed, not success")
+	}
+	log.Printf("Quic mapping modified\n")
 	return nil
 }
 
-func (kc *Client) GetAllVips() *katran.Vips {
-	vips, err := kc.client.GetAllVips(context.Background(), &katran.Empty{})
-	checkError(err)
-	return vips
+func (kc *Client) GetAllVips(ctx context.Context) (*katran.Vips, error) {
+	vips, err := kc.client.GetAllVips(ctx, &katran.Empty{})
+	if err != nil {
+		return nil, errors.Wrapf(err, "GetAllVips failed")
+	}
+	// checkError(err)
+	return vips, nil
 }
 
-func (kc *Client) GetAllHcs() *katran.HcMap {
-	hcs, err := kc.client.GetHealthcheckersDst(
-		context.Background(), &katran.Empty{})
-	checkError(err)
-	return hcs
+func (kc *Client) GetAllHcs(ctx context.Context) (*katran.HcMap, error) {
+	hcs, err := kc.client.GetHealthcheckersDst(ctx, &katran.Empty{})
+	if err != nil {
+		return nil, errors.Wrap(err, "GetAllHcs failed")
+	}
+	// checkError(err)
+	return hcs, nil
 }
 
-func (kc *Client) GetRealsForVip(vip *katran.Vip) *katran.Reals {
-	reals, err := kc.client.GetRealsForVip(context.Background(), vip)
-	checkError(err)
-	return reals
+func (kc *Client) GetRealsForVip(ctx context.Context, vip *katran.Vip) (*katran.Reals, error) {
+	reals, err := kc.client.GetRealsForVip(ctx, vip)
+	if err != nil {
+		return nil, errors.Wrap(err, "GetRealsForVip failed")
+	}
+	// checkError(err)
+	return reals, nil
 }
 
-func (kc *Client) GetVipFlags(vip *katran.Vip) uint64 {
-	flags, err := kc.client.GetVipFlags(context.Background(), vip)
-	checkError(err)
-	return flags.Flags
+func (kc *Client) GetVipFlags(ctx context.Context, vip *katran.Vip) (uint64, error) {
+	flags, err := kc.client.GetVipFlags(ctx, vip)
+	if err != nil {
+		return 0, errors.Wrap(err, "GetVipFlags failed")
+	}
+	// checkError(err)
+	return flags.Flags, nil
 }
 
 func parseVipFlags(flags uint64) string {
@@ -316,8 +415,13 @@ func parseRealFlags(flags int32) string {
 	return flags_str
 }
 
-func (kc *Client) ListVipAndReals(vip *katran.Vip) {
-	reals := kc.GetRealsForVip(vip)
+func (kc *Client) ListVipAndReals(ctx context.Context, vip *katran.Vip) {
+	reals, err := kc.GetRealsForVip(ctx, vip)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	proto := ""
 	if vip.Protocol == IPPROTO_TCP {
 		proto = "tcp"
@@ -328,7 +432,11 @@ func (kc *Client) ListVipAndReals(vip *katran.Vip) {
 		vip.Address,
 		vip.Port,
 		proto)
-	flags := kc.GetVipFlags(vip)
+	flags, err := kc.GetVipFlags(ctx, vip)
+	if err != nil {
+		log.Println(err)
+	}
+
 	fmt.Printf("Vip's flags: %v\n", parseVipFlags(flags))
 	for _, real := range reals.Reals {
 		fmt.Printf("%-20v weight: %v flags: %v\n",
@@ -337,40 +445,71 @@ func (kc *Client) ListVipAndReals(vip *katran.Vip) {
 	}
 }
 
-func (kc *Client) List(addr string, proto int) {
-	vips := kc.GetAllVips()
+func (kc *Client) List(ctx context.Context, addr string, proto int) {
+	vips, err := kc.GetAllVips(ctx)
+	if err != nil {
+		log.Println(err)
+	}
+
 	log.Printf("vips len %v", len(vips.Vips))
 	for _, vip := range vips.Vips {
-		kc.ListVipAndReals(vip)
+		kc.ListVipAndReals(ctx, vip)
 	}
 }
 
-func (kc *Client) ClearAll() {
+func (kc *Client) ClearAll(ctx context.Context) error {
 	fmt.Println("Deleting Vips")
-	vips := kc.GetAllVips()
+	vips, err := kc.GetAllVips(ctx)
+	if err != nil {
+		return errors.WithMessage(err, "ClearAll failed")
+		// log.Println(err)
+	}
+
 	for _, vip := range vips.Vips {
 		ok, err := kc.client.DelVip(context.Background(), vip)
-		if err != nil || !ok.Success {
-			fmt.Printf("error while deleting vip: %v", vip.Address)
+		if err != nil {
+			return errors.Wrapf(err, "ClearAll del vip %s failed", vip.GetAddress())
 		}
+		if !ok.Success {
+			return errors.Errorf("ClearAll del vip %s failed, not success", vip.GetAddress())
+		}
+		// if err != nil || !ok.Success {
+		// 	fmt.Printf("error while deleting vip: %v", vip.Address)
+		// }
 	}
+
 	fmt.Println("Deleting Healthchecks")
-	hcs := kc.GetAllHcs()
+	hcs, err := kc.GetAllHcs(ctx)
+	if err != nil {
+		log.Println(err)
+	}
+
 	var Somark katran.Somark
-	for somark := range hcs.Healthchecks {
+	for somark, dst := range hcs.Healthchecks {
 		Somark.Somark = uint32(somark)
-		ok, err := kc.client.DelHealthcheckerDst(context.Background(), &Somark)
-		if err != nil || !ok.Success {
-			fmt.Printf("error while deleting hc w/ somark: %v", somark)
+		ok, err := kc.client.DelHealthcheckerDst(ctx, &Somark)
+		// if err != nil || !ok.Success {
+		// 	fmt.Printf("error while deleting hc w/ somark: %v", somark)
+		// }
+		if err != nil {
+			return errors.Wrapf(err, "ClearAll del hc %s failed", dst)
+		}
+		if !ok.Success {
+			return errors.Errorf("ClearAll del hc %s failed, not success", dst)
 		}
 	}
+	return nil
 }
 
-func (kc *Client) ListQm() {
+func (kc *Client) ListQm(ctx context.Context) {
 	fmt.Printf("printing address to quic's connection id mapping\n")
 	qreals, err := kc.client.GetQuicRealsMapping(
-		context.Background(), &katran.Empty{})
-	checkError(err)
+		ctx, &katran.Empty{})
+	if err != nil {
+		log.Println(err)
+	}
+	// checkError(err)
+
 	for _, qr := range qreals.Qreals {
 		fmt.Printf("real: %20v = connection id: %6v\n",
 			qr.Address,
@@ -378,29 +517,47 @@ func (kc *Client) ListQm() {
 	}
 }
 
-func (kc *Client) AddHc(addr string, somark uint64) {
+func (kc *Client) AddHc(ctx context.Context, addr string, somark uint64) {
 	var hc katran.Healthcheck
 	hc.Somark = uint32(somark)
 	hc.Address = addr
-	ok, err := kc.client.AddHealthcheckerDst(context.Background(), &hc)
-	checkError(err)
+	ok, err := kc.client.AddHealthcheckerDst(ctx, &hc)
+	if err != nil {
+		log.Println(err)
+	}
+
+	// checkError(err)
 	if !ok.Success {
 		fmt.Printf("error while add hc w/ somark: %v and addr %v", somark, addr)
 	}
 }
 
-func (kc *Client) DelHc(somark uint64) {
+func (kc *Client) DelHc(ctx context.Context, somark uint64) error {
 	var sm katran.Somark
 	sm.Somark = uint32(somark)
-	ok, err := kc.client.DelHealthcheckerDst(context.Background(), &sm)
-	checkError(err)
-	if !ok.Success {
-		fmt.Printf("error while deleting hc w/ somark: %v", somark)
+	ok, err := kc.client.DelHealthcheckerDst(ctx, &sm)
+	if err != nil {
+		return errors.Wrapf(err, "DelHc with mark %d failed", somark)
 	}
+
+	if !ok.Success {
+		return errors.Errorf("DelHc with mark %d failed, not success", somark)
+	}
+
+	// checkError(err)
+	// if !ok.Success {
+	// 	fmt.Printf("error while deleting hc w/ somark: %v", somark)
+	// }
+	return nil
 }
 
-func (kc *Client) ListHc() {
-	hcs := kc.GetAllHcs()
+func (kc *Client) ListHc(ctx context.Context) {
+	hcs, err := kc.GetAllHcs(ctx)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	for somark, addr := range hcs.Healthchecks {
 		fmt.Printf("somark: %10v addr: %10v\n",
 			somark,
@@ -408,15 +565,20 @@ func (kc *Client) ListHc() {
 	}
 }
 
-func (kc *Client) ShowSumStats() {
+func (kc *Client) ShowSumStats(ctx context.Context) {
 	oldPkts := uint64(0)
 	oldBytes := uint64(0)
-	vips := kc.GetAllVips()
+	vips, err := kc.GetAllVips(ctx)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	for true {
 		pkts := uint64(0)
 		bytes := uint64(0)
 		for _, vip := range vips.Vips {
-			stats, err := kc.client.GetStatsForVip(context.Background(), vip)
+			stats, err := kc.client.GetStatsForVip(ctx, vip)
 			if err != nil {
 				continue
 			}
@@ -432,7 +594,7 @@ func (kc *Client) ShowSumStats() {
 	}
 }
 
-func (kc *Client) ShowLruStats() {
+func (kc *Client) ShowLruStats(ctx context.Context) {
 	oldTotalPkts := uint64(0)
 	oldMiss := uint64(0)
 	oldTcpMiss := uint64(0)
@@ -445,17 +607,17 @@ func (kc *Client) ShowLruStats() {
 		udpMiss := float64(0)
 		lruHit := float64(0)
 		stats, err := kc.client.GetLruStats(
-			context.Background(), &katran.Empty{})
+			ctx, &katran.Empty{})
 		if err != nil {
 			continue
 		}
 		missStats, err := kc.client.GetLruMissStats(
-			context.Background(), &katran.Empty{})
+			ctx, &katran.Empty{})
 		if err != nil {
 			continue
 		}
 		fallbackStats, err := kc.client.GetLruFallbackStats(
-			context.Background(), &katran.Empty{})
+			ctx, &katran.Empty{})
 		if err != nil {
 			continue
 		}
@@ -485,8 +647,13 @@ func (kc *Client) ShowLruStats() {
 	}
 }
 
-func (kc *Client) ShowPerVipStats() {
-	vips := kc.GetAllVips()
+func (kc *Client) ShowPerVipStats(ctx context.Context) {
+	vips, err := kc.GetAllVips(ctx)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
 	statsMap := make(map[string]uint64)
 	for _, vip := range vips.Vips {
 		key := strings.Join([]string{
@@ -500,7 +667,7 @@ func (kc *Client) ShowPerVipStats() {
 			key := strings.Join([]string{
 				vip.Address, strconv.Itoa(int(vip.Port)),
 				strconv.Itoa(int(vip.Protocol))}, ":")
-			stats, err := kc.client.GetStatsForVip(context.Background(), vip)
+			stats, err := kc.client.GetStatsForVip(ctx, vip)
 			if err != nil {
 				continue
 			}
@@ -515,13 +682,16 @@ func (kc *Client) ShowPerVipStats() {
 	}
 }
 
-func (kc *Client) ShowIcmpStats() {
+func (kc *Client) ShowIcmpStats(ctx context.Context) {
 	oldIcmpV4 := uint64(0)
 	oldIcmpV6 := uint64(0)
 	for true {
-		icmps, err := kc.client.GetIcmpTooBigStats(
-			context.Background(), &katran.Empty{})
-		checkError(err)
+		icmps, err := kc.client.GetIcmpTooBigStats(ctx, &katran.Empty{})
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		// checkError(err)
 		diffIcmpV4 := icmps.V1 - oldIcmpV4
 		diffIcmpV6 := icmps.V2 - oldIcmpV6
 		fmt.Printf(
