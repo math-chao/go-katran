@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/math-chao/go-katran/katran"
+	katran "github.com/math-chao/go-katran/lb_katran"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 )
@@ -415,7 +415,7 @@ func parseRealFlags(flags int32) string {
 	return flags_str
 }
 
-func (kc *Client) ListVipAndReals(ctx context.Context, vip *katran.Vip) {
+func (kc *Client) ListVipReals(ctx context.Context, vip *katran.Vip) {
 	reals, err := kc.GetRealsForVip(ctx, vip)
 	if err != nil {
 		log.Println(err)
@@ -445,15 +445,16 @@ func (kc *Client) ListVipAndReals(ctx context.Context, vip *katran.Vip) {
 	}
 }
 
-func (kc *Client) List(ctx context.Context, addr string, proto int) {
+func (kc *Client) List(ctx context.Context) {
 	vips, err := kc.GetAllVips(ctx)
 	if err != nil {
 		log.Println(err)
+		return
 	}
 
 	log.Printf("vips len %v", len(vips.Vips))
 	for _, vip := range vips.Vips {
-		kc.ListVipAndReals(ctx, vip)
+		kc.ListVipReals(ctx, vip)
 	}
 }
 
