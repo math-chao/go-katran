@@ -17,9 +17,9 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v5.27.1
-// source: katran/katran.proto
+// source: katran.proto
 
-package katran
+package protos
 
 import (
 	context "context"
@@ -34,29 +34,29 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KatranService_ChangeMac_FullMethodName              = "/gokatran.katran.KatranService/changeMac"
-	KatranService_GetMac_FullMethodName                 = "/gokatran.katran.KatranService/getMac"
-	KatranService_AddVip_FullMethodName                 = "/gokatran.katran.KatranService/addVip"
-	KatranService_DelVip_FullMethodName                 = "/gokatran.katran.KatranService/delVip"
-	KatranService_GetAllVips_FullMethodName             = "/gokatran.katran.KatranService/getAllVips"
-	KatranService_ModifyVip_FullMethodName              = "/gokatran.katran.KatranService/modifyVip"
-	KatranService_ModifyReal_FullMethodName             = "/gokatran.katran.KatranService/modifyReal"
-	KatranService_GetVipFlags_FullMethodName            = "/gokatran.katran.KatranService/getVipFlags"
-	KatranService_GetRealFlags_FullMethodName           = "/gokatran.katran.KatranService/getRealFlags"
-	KatranService_AddRealForVip_FullMethodName          = "/gokatran.katran.KatranService/addRealForVip"
-	KatranService_DelRealForVip_FullMethodName          = "/gokatran.katran.KatranService/delRealForVip"
-	KatranService_ModifyRealsForVip_FullMethodName      = "/gokatran.katran.KatranService/modifyRealsForVip"
-	KatranService_GetRealsForVip_FullMethodName         = "/gokatran.katran.KatranService/getRealsForVip"
-	KatranService_ModifyQuicRealsMapping_FullMethodName = "/gokatran.katran.KatranService/modifyQuicRealsMapping"
-	KatranService_GetQuicRealsMapping_FullMethodName    = "/gokatran.katran.KatranService/getQuicRealsMapping"
-	KatranService_GetStatsForVip_FullMethodName         = "/gokatran.katran.KatranService/getStatsForVip"
-	KatranService_GetLruStats_FullMethodName            = "/gokatran.katran.KatranService/getLruStats"
-	KatranService_GetLruMissStats_FullMethodName        = "/gokatran.katran.KatranService/getLruMissStats"
-	KatranService_GetLruFallbackStats_FullMethodName    = "/gokatran.katran.KatranService/getLruFallbackStats"
-	KatranService_GetIcmpTooBigStats_FullMethodName     = "/gokatran.katran.KatranService/getIcmpTooBigStats"
-	KatranService_AddHealthcheckerDst_FullMethodName    = "/gokatran.katran.KatranService/addHealthcheckerDst"
-	KatranService_DelHealthcheckerDst_FullMethodName    = "/gokatran.katran.KatranService/delHealthcheckerDst"
-	KatranService_GetHealthcheckersDst_FullMethodName   = "/gokatran.katran.KatranService/getHealthcheckersDst"
+	KatranService_ChangeMac_FullMethodName              = "/lb.katran.KatranService/changeMac"
+	KatranService_GetMac_FullMethodName                 = "/lb.katran.KatranService/getMac"
+	KatranService_AddVip_FullMethodName                 = "/lb.katran.KatranService/addVip"
+	KatranService_DelVip_FullMethodName                 = "/lb.katran.KatranService/delVip"
+	KatranService_GetAllVips_FullMethodName             = "/lb.katran.KatranService/getAllVips"
+	KatranService_ModifyVip_FullMethodName              = "/lb.katran.KatranService/modifyVip"
+	KatranService_ModifyReal_FullMethodName             = "/lb.katran.KatranService/modifyReal"
+	KatranService_GetVipFlags_FullMethodName            = "/lb.katran.KatranService/getVipFlags"
+	KatranService_GetRealFlags_FullMethodName           = "/lb.katran.KatranService/getRealFlags"
+	KatranService_AddRealForVip_FullMethodName          = "/lb.katran.KatranService/addRealForVip"
+	KatranService_DelRealForVip_FullMethodName          = "/lb.katran.KatranService/delRealForVip"
+	KatranService_ModifyRealsForVip_FullMethodName      = "/lb.katran.KatranService/modifyRealsForVip"
+	KatranService_GetRealsForVip_FullMethodName         = "/lb.katran.KatranService/getRealsForVip"
+	KatranService_ModifyQuicRealsMapping_FullMethodName = "/lb.katran.KatranService/modifyQuicRealsMapping"
+	KatranService_GetQuicRealsMapping_FullMethodName    = "/lb.katran.KatranService/getQuicRealsMapping"
+	KatranService_GetStatsForVip_FullMethodName         = "/lb.katran.KatranService/getStatsForVip"
+	KatranService_GetLruStats_FullMethodName            = "/lb.katran.KatranService/getLruStats"
+	KatranService_GetLruMissStats_FullMethodName        = "/lb.katran.KatranService/getLruMissStats"
+	KatranService_GetLruFallbackStats_FullMethodName    = "/lb.katran.KatranService/getLruFallbackStats"
+	KatranService_GetIcmpTooBigStats_FullMethodName     = "/lb.katran.KatranService/getIcmpTooBigStats"
+	KatranService_AddHealthcheckerDst_FullMethodName    = "/lb.katran.KatranService/addHealthcheckerDst"
+	KatranService_DelHealthcheckerDst_FullMethodName    = "/lb.katran.KatranService/delHealthcheckerDst"
+	KatranService_GetHealthcheckersDst_FullMethodName   = "/lb.katran.KatranService/getHealthcheckersDst"
 )
 
 // KatranServiceClient is the client API for KatranService service.
@@ -871,7 +871,7 @@ func _KatranService_GetHealthcheckersDst_Handler(srv interface{}, ctx context.Co
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var KatranService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gokatran.katran.KatranService",
+	ServiceName: "lb.katran.KatranService",
 	HandlerType: (*KatranServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
@@ -968,5 +968,5 @@ var KatranService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "katran/katran.proto",
+	Metadata: "katran.proto",
 }

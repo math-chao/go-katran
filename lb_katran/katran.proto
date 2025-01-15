@@ -15,10 +15,7 @@
  */
 
 syntax = "proto3";
-package gokatran.katran;
-option go_package = "gokatran/katran";
-/* option go_package = "./;protos"; */
-
+package lb.katran;
 
 message Empty {}
 
@@ -167,3 +164,4 @@ service KatranService {
 
   rpc getHealthcheckersDst(Empty) returns (hcMap);
 }
+option go_package = "./;protos";
