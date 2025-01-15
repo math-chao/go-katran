@@ -369,7 +369,7 @@ func (kc *Client) GetAllHcs(ctx context.Context) (*katran.HcMap, error) {
 func (kc *Client) GetRealsForVip(ctx context.Context, vip *katran.Vip) (*katran.Reals, error) {
 	reals, err := kc.client.GetRealsForVip(ctx, vip)
 	if err != nil {
-		return nil, errors.Wrap(err, "GetRealsForVip failed")
+		return nil, errors.Wrapf(err, "GetRealsForVip[%s] failed", vip.GetAddress())
 	}
 	// checkError(err)
 	return reals, nil
@@ -564,6 +564,26 @@ func (kc *Client) ListHc(ctx context.Context) {
 			somark,
 			addr)
 	}
+}
+
+func (kc *Client) GetStatsForVip(ctx context.Context, vip *katran.Vip) (*katran.Stats, error) {
+	return kc.client.GetStatsForVip(ctx, vip)
+}
+
+func (kc *Client) GetLruStats(ctx context.Context) (*katran.Stats, error) {
+	return kc.client.GetLruStats(ctx, &katran.Empty{})
+}
+
+func (kc *Client) GetLruMissStats(ctx context.Context) (*katran.Stats, error) {
+	return kc.client.GetLruMissStats(ctx, &katran.Empty{})
+}
+
+func (kc *Client) GetLruFallbackStats(ctx context.Context) (*katran.Stats, error) {
+	return kc.client.GetLruFallbackStats(ctx, &katran.Empty{})
+}
+
+func (kc *Client) GetIcmpTooBigStats(ctx context.Context) (*katran.Stats, error) {
+	return kc.client.GetIcmpTooBigStats(ctx, &katran.Empty{})
 }
 
 func (kc *Client) ShowSumStats(ctx context.Context) {
