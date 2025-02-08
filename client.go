@@ -518,19 +518,20 @@ func (kc *Client) ListQm(ctx context.Context) {
 	}
 }
 
-func (kc *Client) AddHc(ctx context.Context, addr string, somark uint64) {
+func (kc *Client) AddHc(ctx context.Context, addr string, somark uint64) error {
 	var hc katran.Healthcheck
 	hc.Somark = uint32(somark)
 	hc.Address = addr
 	ok, err := kc.client.AddHealthcheckerDst(ctx, &hc)
 	if err != nil {
-		log.Println(err)
+		return errors.Wrap(err, "AddHc failed")
 	}
 
-	// checkError(err)
 	if !ok.Success {
-		fmt.Printf("error while add hc w/ somark: %v and addr %v", somark, addr)
+		return errors.Errorf("AddHc failed, not success")
 	}
+
+	return nil
 }
 
 func (kc *Client) DelHc(ctx context.Context, somark uint64) error {
